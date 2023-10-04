@@ -91,12 +91,14 @@ function update_box()
         
         if data then
             for effect, spell in pairs(data) do
-                local name = res.spells[spell.id].name
-                local remains = math.max(0, spell.timer - os.clock())
+                local name = spell.type == "spell" and res.spells[spell.id].name or spell.type == "buff" and res.buffs[spell.id].name or ""
+                --local remains = math.max(0, spell.timer - os.clock())
+                local remains = spell.timer - os.clock()
+                local shot = spell.shot and "+" or ""
                 
                 if settings.mode == 'whitelist' and settings.whitelist:contains(name) or settings.mode == 'blacklist' and not settings.blacklist:contains(name) then
-                    if settings.timers and remains > 0 then
-                        lines:append('\\cs(%s)%s: %.0f\\cr':format(get_color(spell.actor), name, remains))
+                    if settings.timers then
+                        lines:append('\\cs(%s)%s%s: %.0f\\cr':format(get_color(spell.actor), name, shot, remains))
                     elseif remains < 0 and settings.hide_below_zero then
                         debuffed_mobs[target.id][effect] = nil
                     else
@@ -163,25 +165,69 @@ function apply_debuff(target, effect, spell, actor)
     end
     
     -- Create timer
-    debuffed_mobs[target][effect] = {id=spell, timer=(os.clock() + (res.spells[spell].duration or 0)), actor=actor}
+    debuffed_mobs[target][effect] = {id=spell, timer=(os.clock() + (res.spells[spell].duration or 0)), type="spell", actor=actor}
 end
 
-function handle_shot(target)
-    if not debuffed_mobs[target] or not debuffed_mobs[target][134] then
+shot_map = {
+    [125] = -- Fire Shot
+        { 128}, -- Burn
+    [126] = -- Ice Shot
+        { 129, 4}, -- Frost, Paralyze
+    [127] = -- Wind Shot
+        { 130 }, -- Choke,
+    [128] = -- Earth Shot
+        { 13, 131 }, -- Slow, Hojo: Ichi, Hojo: Ni, Rasp
+    [129] = -- Thunder Shot
+        { 132 }, -- Shock
+    [130] = -- Water Shot
+        { 3, 133 }, -- Poison, Poison II, Drown
+    [131] = -- Light Shot 
+        {134}, -- Dia
+    [132] = -- Dark Shot
+        { 135, 5} -- Bio Bio II Bio III Kurayami: Ichi Kurayami: Ni Blind Blind II
+    
+}
+
+function handle_shot(param, target)
+    if not shot_map[param] then
         return true
     end
-    
-    local current = debuffed_mobs[target][134].id
-    if current < 26 then
-        debuffed_mobs[target][134].id = current + 1
+
+    if not debuffed_mobs[target] then
+        return true
     end
+
+    for _,v in ipairs(shot_map[param]) do
+        if debuffed_mobs[target][v] then 
+            local current = debuffed_mobs[target][v].shot
+            if not current then
+                debuffed_mobs[target][v].shot = true
+            end
+        end
+    end
+end
+
+function handle_ws(act, target)
+    if not debuffed_mobs[target] then
+        debuffed_mobs[target] = {}
+    end
+    if act.param == 83 then -- armor break
+        -- varies based on TP
+        debuffed_mobs[target][149] = {id=149, timer=(os.clock() + (180 or 0)), type="buff", actor=actor}
+    end
+
 end
 
 function inc_action(act)
     if act.category ~= 4 then
-        if act.category == 6 and act.param == 131 then
-            handle_shot(act.targets[1].id)
+        if act.category == 6 and shot_map[act.param] then
+            handle_shot(act.param, act.targets[1].id)
+        elseif act.category == 3 then 
+            handle_ws(act, act.targets[1].id)
+        elseif act.category ~= 1 then
+            --log(T{act})
         end
+    
         return
     end
     
@@ -220,6 +266,8 @@ function inc_action_message(arr)
         if debuffed_mobs[arr.target_id] then
             debuffed_mobs[arr.target_id][arr.param_1] = nil
         end
+    else 
+        --log(arr.message_id, T{arr})
     end
 end
 
@@ -227,7 +275,7 @@ windower.register_event('login','load', function()
     player_id = (windower.ffxi.get_player() or {}).id
 end)
 
-windower.register_event('logout','zone change', function()
+windower.register_event('logout','zone change','job change', function()
     debuffed_mobs = {}
 end)
 
