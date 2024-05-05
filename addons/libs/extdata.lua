@@ -1755,6 +1755,7 @@ function decode.Augmented(str)
         local points_map = {[1]= 50, [2] = 80, [3] = 120, [4]=170,[5]=220,[6]=280,[7]=340,[8]=410,[9]=480,[10]=560,[11]=650,[12]=750,[13]=860,[14]=980,[15]=1110
                 ,[16]=1250,[17]=1410,[18]=1580,[19]=1760,[20]=1960,[21]=2170,[22]=2400,[23]=2650,[24]=2910,[25]=3180,[26]=3460,[27]=3760,[28]=4070,[29]=4400,}
         rettab.path = path_map[math.floor(str:byte(5)%4)]
+        rettab.rank = math.floor(str:byte(7)%128 / 4)
         rettab.augments = {'Path: ' ..rettab.path}
         rettab.rank = math.floor(str:byte(7)%128 / 4)
         rettab.RP = math.max(points_map[rettab.rank] or 0 - str:byte(6) * 256 + str:byte(5),0)
